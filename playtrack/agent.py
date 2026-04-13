@@ -118,19 +118,16 @@ def start_recording(match_id: str):
     timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
     video_path = RECORDINGS_DIR / f"{match_id}_{CAMERA_ID}_{timestamp}.mp4"
 
-    # ------------------------------------------------------------------
-    # Comando ffmpeg
-    # Per sviluppo (senza camera) usa testsrc (video sintetico).
-    # Per produzione su RPi con libcamera, sostituire con:
-    #   "-f", "libcamera", "-i", "/dev/video0",x\
-    # ------------------------------------------------------------------
     cmd = [
-        "ffmpeg",
-        "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=25",
-        "-vcodec", "libx264",
-        "-preset", "ultrafast",
-        "-crf", "23",
-        str(video_path),
+        "rpicam-vid",
+        "-t", "0",
+        "--width", "1920",
+        "--height", "1080",
+        "--framerate", "30",
+        "--codec", "libav",
+        "--libav-format", "mp4",
+        "--bitrate", "8000000",
+        "-o", str(video_path),
     ]
 
     proc = subprocess.Popen(
