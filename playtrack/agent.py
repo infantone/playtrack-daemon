@@ -115,7 +115,7 @@ log.debug(f"[INIT] RECORDINGS_DIR={RECORDINGS_DIR} QUEUE_DB={QUEUE_DB}")
 cred = credentials.Certificate(SA_PATH)
 firebase_admin.initialize_app(cred, {
     "projectId": PROJECT_ID,
-    "storageBucket": f"{PROJECT_ID}.appspot.com",
+    "storageBucket": f"{PROJECT_ID}.firebasestorage.app",
 })
 log.debug("[INIT] Firebase inizializzato")
 db = firestore.client()
