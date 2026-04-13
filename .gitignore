@@ -1,0 +1,16 @@
+# Credenziali — MAI committare
+firebase-service-account.json
+*.json
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Video e dati locali
+*.mp4
+*.db
+recordings/
