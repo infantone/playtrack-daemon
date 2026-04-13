@@ -21,7 +21,7 @@ chown playtrack:playtrack /opt/playtrack/__init__.py \
                           /opt/playtrack/agent.py \
                           /opt/playtrack/uploader.py
 
-sudo -u playtrack /opt/playtrack/venv/bin/pip install --quiet -r "$SCRIPT_DIR/requirements.txt"
+#sudo -u playtrack /opt/playtrack/venv/bin/pip install --quiet -r "$SCRIPT_DIR/requirements.txt"
 
 systemctl restart playtrack
 ok "Codice aggiornato e daemon riavviato"
