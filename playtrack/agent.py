@@ -1,4 +1,5 @@
 import os
+import signal
 import time
 import logging
 import subprocess
@@ -133,7 +134,7 @@ def start_recording(match_id: str):
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
 
     state["recording"]   = True
@@ -161,11 +162,24 @@ def stop_recording():
     match_id   = state["match_id"]
     video_path = state["video_path"]
 
-    proc.terminate()
+    # SIGINT triggers graceful shutdown in rpicam-vid, allowing libav to
+    # finalize the MP4 moov atom. SIGTERM/kill would leave the file without
+    # the moov atom, producing a file with size but a black/unplayable video.
+    proc.send_signal(signal.SIGINT)
     try:
-        proc.wait(timeout=10)
+        proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        log.warning("[REC] SIGINT timeout, forcing SIGTERM")
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+    stderr_output = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+    if stderr_output:
+        log.info(f"[REC] rpicam-vid stderr: {stderr_output[-2000:]}")
 
     state["recording"]   = False
     state["ffmpeg_proc"] = None
