@@ -22,6 +22,10 @@ from playtrack.uploader import upload_video
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("/opt/playtrack/logs", encoding="utf-8"),
+    ],
 )
 log = logging.getLogger(__name__)
 # Riduci il rumore dei SDK di terze parti
