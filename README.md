@@ -9,7 +9,7 @@ I RPi registrano video, li caricano su Firebase Storage, e ascoltano comandi da 
 
 ```bash
 # 1. Clona il repo
-git clone https://github.com/TUO_USERNAME/playtrack-daemon
+git clone https://github.com/infantone/playtrack-daemon
 cd playtrack-daemon
 
 # 2. (Opzionale) Copia il service account Firebase nella directory del repo
