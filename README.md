@@ -12,20 +12,37 @@ I RPi registrano video, li caricano su Firebase Storage, e ascoltano comandi da 
 git clone https://github.com/infantone/playtrack-daemon
 cd playtrack-daemon
 
-# 2. (Opzionale) Copia il service account Firebase nella directory del repo
-#    Altrimenti lo puoi copiare manualmente dopo il setup
-cp /path/to/firebase-service-account.json .
-
-# 3. Esegui il setup (chiederà CAMERA_ID, DEVICE_NAME, FIELD_ID, FIREBASE_PROJECT_ID)
-sudo ./setup.sh
+# 2. Esegui il setup (chiederà CAMERA_ID, DEVICE_NAME, FIELD_ID, FIREBASE_PROJECT_ID)
+sudo python3 setup.py
 ```
+
+Il setup mostra ogni comando eseguito e il relativo output.
+Se un passaggio fallisce, viene stampato il messaggio di errore esatto prima di uscire.
+
+### Firebase service account
+
+Il service account JSON è necessario per autenticarsi su Firebase Storage e Firestore.
+Il setup lo cerca automaticamente nella root del repo (`./firebase-service-account.json`).
+Se non lo trova durante il setup, copialo manualmente **dopo**:
+
+```bash
+sudo cp /path/to/firebase-service-account.json /opt/playtrack/firebase-service-account.json
+sudo chown playtrack:playtrack /opt/playtrack/firebase-service-account.json
+sudo chmod 600 /opt/playtrack/firebase-service-account.json
+```
+
+> Il file non va mai committato nel repo (è già nel `.gitignore`).
+> Lo stesso service account funziona su tutti i RPi del progetto.
 
 ## Aggiornare il codice su un RPi già configurato
 
 ```bash
 git pull
-sudo ./update.sh
+sudo python3 update.py
 ```
+
+`update.py` copia i sorgenti Python, verifica se `requirements.txt` è cambiato
+(e installa le nuove dipendenze solo se necessario), poi riavvia il servizio.
 
 ## Variabili d'ambiente (.env)
 
@@ -77,6 +94,4 @@ Scrivi su `fields/{fieldId}/command`:
 
 ## Note
 
-- Il `firebase-service-account.json` **non va mai committato** (nel .gitignore)
-- Lo stesso service account funziona su tutti i RPi del progetto
 - Per passare alla camera reale (libcamera), modifica la riga ffmpeg in `playtrack/agent.py`
