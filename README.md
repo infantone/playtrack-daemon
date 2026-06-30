@@ -58,6 +58,30 @@ sudo python3 update.py
 | `TELEGRAM_BOT_TOKEN` | `123456:ABC-...` | opzionale — **diverso** per ogni camera |
 | `TELEGRAM_CHAT_ID` | `-1001234567890` | opzionale — id del gruppo, **uguale** su tutti i Pi |
 
+### Valori attesi dalla webapp (prototipo)
+
+⚠️ Per ora la webapp (`playtrack-af614.web.app`) è un prototipo e si aspetta
+**esattamente** questi valori per riconoscere i due Raspberry. Usali così come
+sono nel `.env` (non cambiarli finché la webapp non viene generalizzata):
+
+**Raspberry cam-a:**
+```
+CAMERA_ID=cam-a
+DEVICE_NAME=playtrack-cam-a
+FIELD_ID=campo-1
+```
+
+**Raspberry cam-b:**
+```
+CAMERA_ID=cam-b
+DEVICE_NAME=playtrack-campo1-cam-b
+FIELD_ID=campo-1
+```
+
+> Nota: i due `DEVICE_NAME` non seguono lo stesso schema (`playtrack-cam-a` vs
+> `playtrack-campo1-cam-b`). È voluto: sono i valori che la webapp prototipo
+> si aspetta oggi.
+
 ## Struttura su disco dopo il setup
 
 ```
@@ -107,20 +131,35 @@ della sua camera (`rpicam-jpeg`).
 
 **Setup (una volta):**
 
-1. Crea **2 bot** con [@BotFather](https://t.me/BotFather) (`/newbot`), es.
-   `playtrack_campo1_cama_bot` e `playtrack_campo1_camb_bot`. Annota i 2 token.
-2. Crea un **gruppo** Telegram e aggiungi entrambi i bot.
-3. Trova il **chat id** del gruppo: lascia `TELEGRAM_CHAT_ID` vuoto, avvia il
-   daemon, scrivi `/foto` nel gruppo — il bot risponde con il chat id. Poi
-   imposta quel valore nel `.env` di **entrambi** i Pi.
-4. Nel `.env` di ogni Pi metti il **suo** `TELEGRAM_BOT_TOKEN` e lo **stesso**
-   `TELEGRAM_CHAT_ID`, quindi `sudo systemctl restart playtrack`.
+1. **Crea 2 bot** con [@BotFather](https://t.me/BotFather) (`/newbot`), es.
+   username `playtrack_campo1_cama_bot` e `playtrack_campo1_camb_bot`.
+   Annota i **2 token** (uno per camera).
 
-`setup.py` chiede questi due valori (opzionali) durante l'installazione.
+2. **Disattiva la Group Privacy** di entrambi i bot (FONDAMENTALE: con la
+   privacy attiva — default — un bot nel gruppo non riceve i comandi):
+   - @BotFather → `/mybots` → scegli il bot → **Bot Settings** → **Group
+     Privacy** → **Turn off**. Ripeti per il secondo bot.
+
+3. **Crea un gruppo** Telegram e **aggiungi entrambi i bot**.
+   > Se avevi già aggiunto i bot *prima* di disattivare la privacy, devi
+   > **rimuoverli e riaggiungerli**: il cambio ha effetto solo da quando rientrano.
+
+4. **Trova il chat id del gruppo** — il modo più semplice, indipendente dal
+   daemon: aggiungi temporaneamente **@RawDataBot** (o **@getidsbot**) al gruppo.
+   Scrive da solo un blocco con `"chat": { "id": -100... }`: quel numero
+   (col meno davanti) è il chat id. Poi rimuovi @RawDataBot.
+
+5. **Configura il `.env`** di ogni Pi: il **suo** `TELEGRAM_BOT_TOKEN` e lo
+   **stesso** `TELEGRAM_CHAT_ID` su entrambi, poi `sudo systemctl restart playtrack`.
+   (`setup.py` chiede questi due valori — opzionali — durante l'installazione.)
 
 **Uso:** scrivi `/foto` nel gruppo → ricevi le due inquadrature.
 Con `/foto@nome_bot` ne scatti una sola. Se la camera sta registrando, il bot
 risponde che non può scattare (la camera è esclusiva).
+
+> Se `/foto` non riceve risposta: 1) il daemon è attivo e aggiornato sul Pi?
+> (`git pull` + `sudo python3 update.py`); 2) la Group Privacy è **off** e i bot
+> sono stati **riaggiunti** al gruppo dopo averla disattivata?
 
 ## Note
 
