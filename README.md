@@ -55,6 +55,8 @@ sudo python3 update.py
 | `GOOGLE_APPLICATION_CREDENTIALS` | `/opt/playtrack/firebase-service-account.json` | fisso |
 | `RECORDINGS_DIR` | `/var/playtrack/recordings` | fisso |
 | `QUEUE_DB` | `/var/playtrack/queue/uploads.db` | fisso |
+| `TELEGRAM_BOT_TOKEN` | `123456:ABC-...` | opzionale — **diverso** per ogni camera |
+| `TELEGRAM_CHAT_ID` | `-1001234567890` | opzionale — id del gruppo, **uguale** su tutti i Pi |
 
 ## Struttura su disco dopo il setup
 
@@ -62,6 +64,7 @@ sudo python3 update.py
 /opt/playtrack/
 ├── agent.py
 ├── uploader.py
+├── telegram_bot.py
 ├── __init__.py
 ├── requirements.txt
 ├── .env                          (600, non nel repo)
@@ -91,6 +94,33 @@ Scrivi su `fields/{fieldId}/command`:
 { "action": "start", "matchId": "match-001" }
 { "action": "stop" }
 ```
+
+## Verificare l'inquadratura in campo (`/foto` su Telegram)
+
+Per posizionare le camere serve vedere al volo cosa stanno inquadrando, dal
+telefono. Ogni RPi ha il **proprio bot Telegram**; i due bot stanno nello
+**stesso gruppo**: scrivi `/foto` nel gruppo e ognuno risponde con uno scatto
+della sua camera (`rpicam-jpeg`).
+
+> Serve un token diverso per ogni camera: Telegram non consente a due processi
+> di fare polling sullo stesso token (errore `409 Conflict`).
+
+**Setup (una volta):**
+
+1. Crea **2 bot** con [@BotFather](https://t.me/BotFather) (`/newbot`), es.
+   `playtrack_campo1_cama_bot` e `playtrack_campo1_camb_bot`. Annota i 2 token.
+2. Crea un **gruppo** Telegram e aggiungi entrambi i bot.
+3. Trova il **chat id** del gruppo: lascia `TELEGRAM_CHAT_ID` vuoto, avvia il
+   daemon, scrivi `/foto` nel gruppo — il bot risponde con il chat id. Poi
+   imposta quel valore nel `.env` di **entrambi** i Pi.
+4. Nel `.env` di ogni Pi metti il **suo** `TELEGRAM_BOT_TOKEN` e lo **stesso**
+   `TELEGRAM_CHAT_ID`, quindi `sudo systemctl restart playtrack`.
+
+`setup.py` chiede questi due valori (opzionali) durante l'installazione.
+
+**Uso:** scrivi `/foto` nel gruppo → ricevi le due inquadrature.
+Con `/foto@nome_bot` ne scatti una sola. Se la camera sta registrando, il bot
+risponde che non può scattare (la camera è esclusiva).
 
 ## Note
 

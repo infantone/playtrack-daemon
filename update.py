@@ -62,6 +62,7 @@ SOURCE_FILES = [
     SCRIPT_DIR / "playtrack" / "__init__.py",
     SCRIPT_DIR / "playtrack" / "agent.py",
     SCRIPT_DIR / "playtrack" / "uploader.py",
+    SCRIPT_DIR / "playtrack" / "telegram_bot.py",
 ]
 
 # Opzionale: aggiorna anche requirements se cambiati

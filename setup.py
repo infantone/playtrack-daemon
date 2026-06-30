@@ -108,6 +108,7 @@ SOURCE_FILES = [
     SCRIPT_DIR / "playtrack" / "__init__.py",
     SCRIPT_DIR / "playtrack" / "agent.py",
     SCRIPT_DIR / "playtrack" / "uploader.py",
+    SCRIPT_DIR / "playtrack" / "telegram_bot.py",
 ]
 REQUIREMENTS = SCRIPT_DIR / "requirements.txt"
 
@@ -136,15 +137,23 @@ def collect_params():
         if not val:
             err(f"{name} non può essere vuoto")
 
-    return camera_id, device_name, field_id, project_id
+    print()
+    info("Telegram (opzionale — comando /foto per verificare l'inquadratura)")
+    info("Lascia vuoto per saltare; potrai configurarlo dopo nel .env.")
+    tg_token = ask("TELEGRAM_BOT_TOKEN (da @BotFather, DIVERSO per ogni camera)")
+    tg_chat  = ask("TELEGRAM_CHAT_ID (id del gruppo, UGUALE su tutti i Pi)")
+
+    return camera_id, device_name, field_id, project_id, tg_token, tg_chat
 
 
-def confirm(camera_id, device_name, field_id, project_id):
+def confirm(camera_id, device_name, field_id, project_id, tg_token, tg_chat):
     print(f"\n{BOLD}--- Riepilogo configurazione ---{RESET}")
     print(f"  CAMERA_ID            : {camera_id}")
     print(f"  DEVICE_NAME          : {device_name}")
     print(f"  FIELD_ID             : {field_id}")
     print(f"  FIREBASE_PROJECT_ID  : {project_id}")
+    print(f"  TELEGRAM_BOT_TOKEN   : {'(impostato)' if tg_token else '(vuoto, disattivato)'}")
+    print(f"  TELEGRAM_CHAT_ID     : {tg_chat or '(vuoto)'}")
     print()
     ans = ask("Confermi? (y/n)")
     if ans.lower() != "y":
@@ -255,7 +264,7 @@ def step4_venv():
 # ---------------------------------------------------------------------------
 # Step 5 — Credenziali Firebase e .env
 # ---------------------------------------------------------------------------
-def step5_credentials(camera_id, device_name, field_id, project_id):
+def step5_credentials(camera_id, device_name, field_id, project_id, tg_token, tg_chat):
     step(5, TOTAL_STEPS, "Configurazione credenziali")
 
     sa_src = SCRIPT_DIR / "firebase-service-account.json"
@@ -285,6 +294,11 @@ def step5_credentials(camera_id, device_name, field_id, project_id):
         # Percorsi locali — fissi
         RECORDINGS_DIR={RECORDINGS_DIR}
         QUEUE_DB={QUEUE_DIR / 'uploads.db'}
+
+        # Telegram — opzionale (comando /foto). Token DIVERSO per ogni camera,
+        # chat id del gruppo UGUALE su tutti i Pi. Vuoto = bot disattivato.
+        TELEGRAM_BOT_TOKEN={tg_token}
+        TELEGRAM_CHAT_ID={tg_chat}
     """)
 
     info(f"Scrittura {ENV_FILE}")
@@ -390,15 +404,15 @@ if __name__ == "__main__":
 
     check_root()
 
-    camera_id, device_name, field_id, project_id = collect_params()
-    confirm(camera_id, device_name, field_id, project_id)
+    camera_id, device_name, field_id, project_id, tg_token, tg_chat = collect_params()
+    confirm(camera_id, device_name, field_id, project_id, tg_token, tg_chat)
 
     try:
         step1_system_deps()
         step2_user_and_dirs()
         step3_copy_code()
         step4_venv()
-        step5_credentials(camera_id, device_name, field_id, project_id)
+        step5_credentials(camera_id, device_name, field_id, project_id, tg_token, tg_chat)
         step6_systemd()
         final_summary(camera_id, device_name, field_id)
     except KeyboardInterrupt:

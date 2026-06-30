@@ -15,6 +15,7 @@ load_dotenv()
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 from playtrack.uploader import upload_video
+from playtrack.telegram_bot import start_telegram_worker
 
 # ---------------------------------------------------------------------------
 # Logging base (console)
@@ -187,6 +188,58 @@ state = {
     "video_path":   None,
 }
 
+# Serializza l'accesso alla camera tra registrazione e scatto foto (/foto Telegram):
+# la camera è una risorsa esclusiva, rpicam-vid e rpicam-jpeg non possono coesistere.
+camera_lock = threading.Lock()
+
+SNAPSHOT_PATH = RECORDINGS_DIR / f".snapshot_{CAMERA_ID}.jpg"
+
+
+def capture_snapshot():
+    """
+    Scatta un singolo frame JPEG per verificare l'inquadratura della camera.
+
+    Ritorna:
+        - il Path del file JPEG in caso di successo
+        - None se la camera è occupata (registrazione in corso)
+    Solleva un'eccezione se rpicam-jpeg fallisce.
+    """
+    if state["recording"]:
+        log.info("[SNAP] Richiesta foto ignorata: registrazione in corso")
+        return None
+
+    if not camera_lock.acquire(timeout=10):
+        raise RuntimeError("camera occupata (timeout acquisizione lock)")
+    try:
+        if state["recording"]:
+            log.info("[SNAP] Richiesta foto ignorata: registrazione in corso")
+            return None
+
+        cmd = [
+            "rpicam-jpeg",
+            "-n",                 # nessuna preview
+            "-t", "800",          # ~0.8s di warmup per esposizione/bilanciamento
+            "--width", "1920",
+            "--height", "1080",
+            "-o", str(SNAPSHOT_PATH),
+        ]
+        log.info(f"[SNAP] Scatto: {' '.join(cmd)}")
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode(errors="replace").strip()
+            log.error(f"[SNAP] rpicam-jpeg fallito (rc={result.returncode}): {stderr}")
+            raise RuntimeError(f"rpicam-jpeg rc={result.returncode}")
+
+        size = SNAPSHOT_PATH.stat().st_size if SNAPSHOT_PATH.exists() else -1
+        log.info(f"[SNAP] Foto pronta: {SNAPSHOT_PATH} ({size} bytes)")
+        if size <= 0:
+            raise RuntimeError("file foto vuoto o assente")
+        return SNAPSHOT_PATH
+    finally:
+        camera_lock.release()
+
 # ---------------------------------------------------------------------------
 # Registrazione
 # ---------------------------------------------------------------------------
@@ -219,22 +272,27 @@ def start_recording(match_id: str):
     ]
     log.debug(f"[REC] Comando: {' '.join(cmd)}")
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
+    # Acquisisci la camera (attende l'eventuale scatto foto in corso, ~1s)
+    with camera_lock:
+        if state["recording"]:
+            log.warning("[REC] start ignorato: gia' in registrazione (race)")
+            return
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        state["recording"]   = True
+        state["match_id"]    = match_id
+        state["ffmpeg_proc"] = proc
+        state["video_path"]  = video_path
+
     log.debug(f"[REC] PID rpicam-vid: {proc.pid}")
 
     # Stream stderr in real-time su un thread separato
     threading.Thread(
         target=_stream_stderr, args=(proc, "RPICAM"), daemon=True
     ).start()
-
-    state["recording"]   = True
-    state["match_id"]    = match_id
-    state["ffmpeg_proc"] = proc
-    state["video_path"]  = video_path
 
     log.debug("[REC] Aggiornamento Firestore status=recording")
     _update_camera_status("recording")
@@ -402,6 +460,9 @@ def main():
 
     threading.Thread(target=upload_worker,    daemon=True).start()
     threading.Thread(target=heartbeat_worker, daemon=True).start()
+
+    # Bot Telegram per il comando /foto (no-op se TELEGRAM_BOT_TOKEN non è impostato)
+    start_telegram_worker(capture_snapshot, f"{FIELD_ID} / {CAMERA_ID}")
 
     field_ref = db.collection("fields").document(FIELD_ID)
     field_ref.on_snapshot(on_field_snapshot)
