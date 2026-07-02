@@ -26,15 +26,17 @@ _API = "https://api.telegram.org/bot{token}/{method}"
 _POLL_TIMEOUT = 30  # long-poll (secondi)
 
 
-def start_telegram_worker(capture_fn, label: str):
+def start_telegram_worker(capture_fn, clip_fn, label: str):
     """
     Avvia il worker Telegram in un thread daemon (no-op se il token non è
     configurato).
 
-    capture_fn() deve restituire:
-        - il path del file JPEG in caso di successo
+    capture_fn() -> foto (comando /foto)
+    clip_fn(duration_sec=None) -> clip video (comando /video)
+    Entrambe devono restituire:
+        - il path del file in caso di successo
         - None se la camera è occupata (registrazione in corso)
-        - oppure sollevare un'eccezione in caso di errore di scatto
+        - oppure sollevare un'eccezione in caso di errore
     label: etichetta della camera, es. "campo-1 / cam-a"
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
@@ -50,7 +52,7 @@ def start_telegram_worker(capture_fn, label: str):
                     "(il bot risponde con il chat id ma non scatta finché non è configurato)")
 
     t = threading.Thread(
-        target=_run, args=(token, allowed_chat, capture_fn, label), daemon=True
+        target=_run, args=(token, allowed_chat, capture_fn, clip_fn, label), daemon=True
     )
     t.start()
     log.info(f"[TG] Worker Telegram avviato (label={label})")
@@ -59,7 +61,7 @@ def start_telegram_worker(capture_fn, label: str):
 # ---------------------------------------------------------------------------
 # Loop principale
 # ---------------------------------------------------------------------------
-def _run(token, allowed_chat, capture_fn, label):
+def _run(token, allowed_chat, capture_fn, clip_fn, label):
     session = requests.Session()
     offset = None
     while True:
@@ -73,7 +75,7 @@ def _run(token, allowed_chat, capture_fn, label):
         for upd in updates:
             offset = upd["update_id"] + 1
             try:
-                _handle_update(session, token, allowed_chat, capture_fn, label, upd)
+                _handle_update(session, token, allowed_chat, capture_fn, clip_fn, label, upd)
             except Exception as e:
                 log.warning(f"[TG] Errore gestione update: {e}")
 
@@ -98,7 +100,7 @@ def _get_updates(session, token, offset):
     return data.get("result", [])
 
 
-def _handle_update(session, token, allowed_chat, capture_fn, label, upd):
+def _handle_update(session, token, allowed_chat, capture_fn, clip_fn, label, upd):
     msg = upd.get("message")
     if not msg:
         return
@@ -108,10 +110,12 @@ def _handle_update(session, token, allowed_chat, capture_fn, label, upd):
     if not text.startswith("/"):
         return
 
-    # Normalizza il comando: "/foto@cam_a_bot args" -> "/foto"
-    cmd = text.split()[0].lower()
+    # Normalizza il comando: "/foto@cam_a_bot args" -> "/foto", tieni gli argomenti
+    parts = text.split()
+    cmd   = parts[0].lower()
     if "@" in cmd:
         cmd = cmd.split("@", 1)[0]
+    args = parts[1:]
 
     # Bootstrap: senza chat autorizzato aiuta a scoprire il chat id, ma non scatta.
     if allowed_chat is None:
@@ -128,11 +132,14 @@ def _handle_update(session, token, allowed_chat, capture_fn, label, upd):
 
     if cmd in ("/foto", "/photo"):
         _do_snapshot(session, token, chat_id, capture_fn, label)
+    elif cmd in ("/video", "/clip"):
+        _do_video(session, token, chat_id, clip_fn, label, args)
     elif cmd in ("/start", "/help"):
         _send_message(
             session, token, chat_id,
             f"PlayTrack — {label}\n\nComandi:\n"
-            f"/foto — scatta e invia l'inquadratura attuale della camera"
+            f"/foto — scatta e invia l'inquadratura attuale\n"
+            f"/video [sec] — invia una clip 1080p50 (default 40s, max 45s)"
         )
 
 
@@ -151,6 +158,32 @@ def _do_snapshot(session, token, chat_id, capture_fn, label):
         return
 
     _send_photo(session, token, chat_id, path, caption=f"📷 {label}")
+
+
+def _do_video(session, token, chat_id, clip_fn, label, args):
+    duration = None
+    if args:
+        try:
+            duration = int(args[0])
+        except ValueError:
+            duration = None
+
+    _send_chat_action(session, token, chat_id, "record_video")
+    _send_message(session, token, chat_id,
+                  f"🎥 {label}: registro la clip, attendi qualche secondo…")
+    try:
+        path = clip_fn(duration)
+    except Exception as e:
+        log.error(f"[TG] Clip fallita: {e}")
+        _send_message(session, token, chat_id, f"⚠️ {label}: {e}")
+        return
+
+    if path is None:
+        _send_message(session, token, chat_id,
+                      f"🔴 {label}: sto registrando, riprova a fine partita.")
+        return
+
+    _send_video(session, token, chat_id, path, caption=f"🎥 {label}")
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +224,22 @@ def _send_photo(session, token, chat_id, path, caption):
             log.warning(f"[TG] sendPhoto risposta {r.status_code}: {r.text}")
     except Exception as e:
         log.warning(f"[TG] sendPhoto errore: {e}")
+
+
+def _send_video(session, token, chat_id, path, caption):
+    try:
+        with open(path, "rb") as f:
+            r = session.post(
+                _API.format(token=token, method="sendVideo"),
+                data={"chat_id": chat_id, "caption": caption, "supports_streaming": "true"},
+                files={"video": ("clip.mp4", f, "video/mp4")},
+                timeout=300,  # upload di decine di MB su rete di campo
+            )
+        if r.status_code != 200:
+            log.warning(f"[TG] sendVideo risposta {r.status_code}: {r.text}")
+            _send_message(session, token, chat_id,
+                          f"⚠️ invio clip fallito ({r.status_code}). "
+                          f"Forse troppo grande o rete lenta.")
+    except Exception as e:
+        log.warning(f"[TG] sendVideo errore: {e}")
+        _send_message(session, token, chat_id, "⚠️ errore nell'invio della clip.")

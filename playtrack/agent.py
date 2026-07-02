@@ -194,6 +194,14 @@ camera_lock = threading.Lock()
 
 SNAPSHOT_PATH = RECORDINGS_DIR / f".snapshot_{CAMERA_ID}.jpg"
 
+# Clip breve per /video: 1080p50 nativo, dimensionata per stare sotto i 50 MB
+# che Telegram consente ai bot. A 8 Mbps: ~1 MB/s -> 40s ≈ 40 MB.
+CLIP_PATH        = RECORDINGS_DIR / f".clip_{CAMERA_ID}.mp4"
+CLIP_DEFAULT_SEC = 40
+CLIP_MAX_SEC     = 45          # ~45 MB, margine sotto il limite Telegram
+CLIP_BITRATE     = 8_000_000   # come la registrazione
+TELEGRAM_MAX_BYTES = 50 * 1024 * 1024
+
 
 def capture_snapshot():
     """
@@ -237,6 +245,69 @@ def capture_snapshot():
         if size <= 0:
             raise RuntimeError("file foto vuoto o assente")
         return SNAPSHOT_PATH
+    finally:
+        camera_lock.release()
+
+
+def capture_clip(duration_sec=None):
+    """
+    Registra una clip breve (1080p, 50fps) per verificare il feed dal vivo.
+
+    duration_sec: durata richiesta in secondi (default CLIP_DEFAULT_SEC,
+                  limitata a CLIP_MAX_SEC per restare sotto i 50 MB di Telegram).
+    Ritorna:
+        - il Path del file MP4 in caso di successo
+        - None se la camera è occupata (registrazione in corso)
+    Solleva un'eccezione se rpicam-vid fallisce o la clip supera il limite.
+    """
+    if duration_sec is None:
+        duration = CLIP_DEFAULT_SEC
+    else:
+        duration = max(1, min(int(duration_sec), CLIP_MAX_SEC))
+
+    if state["recording"]:
+        log.info("[CLIP] Richiesta video ignorata: registrazione in corso")
+        return None
+
+    if not camera_lock.acquire(timeout=10):
+        raise RuntimeError("camera occupata (timeout acquisizione lock)")
+    try:
+        if state["recording"]:
+            log.info("[CLIP] Richiesta video ignorata: registrazione in corso")
+            return None
+
+        cmd = [
+            "rpicam-vid",
+            "-t", str(duration * 1000),
+            "--width", "1920",
+            "--height", "1080",
+            "--framerate", "50",
+            "--codec", "libav",
+            "--libav-format", "mp4",
+            "--bitrate", str(CLIP_BITRATE),
+            "-o", str(CLIP_PATH),
+        ]
+        log.info(f"[CLIP] Registrazione {duration}s: {' '.join(cmd)}")
+        # rpicam-vid con -t finito termina da solo e libav finalizza l'MP4.
+        result = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            timeout=duration + 30,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode(errors="replace").strip()
+            log.error(f"[CLIP] rpicam-vid fallito (rc={result.returncode}): {stderr}")
+            raise RuntimeError(f"rpicam-vid rc={result.returncode}")
+
+        size = CLIP_PATH.stat().st_size if CLIP_PATH.exists() else -1
+        log.info(f"[CLIP] Clip pronta: {CLIP_PATH} ({size} bytes)")
+        if size <= 0:
+            raise RuntimeError("file clip vuoto o assente")
+        if size > TELEGRAM_MAX_BYTES:
+            raise RuntimeError(
+                f"clip {size // (1024*1024)} MB supera il limite Telegram (50 MB), "
+                f"riduci la durata"
+            )
+        return CLIP_PATH
     finally:
         camera_lock.release()
 
@@ -461,8 +532,8 @@ def main():
     threading.Thread(target=upload_worker,    daemon=True).start()
     threading.Thread(target=heartbeat_worker, daemon=True).start()
 
-    # Bot Telegram per il comando /foto (no-op se TELEGRAM_BOT_TOKEN non è impostato)
-    start_telegram_worker(capture_snapshot, f"{FIELD_ID} / {CAMERA_ID}")
+    # Bot Telegram per i comandi /foto e /video (no-op se TELEGRAM_BOT_TOKEN non è impostato)
+    start_telegram_worker(capture_snapshot, capture_clip, f"{FIELD_ID} / {CAMERA_ID}")
 
     field_ref = db.collection("fields").document(FIELD_ID)
     field_ref.on_snapshot(on_field_snapshot)

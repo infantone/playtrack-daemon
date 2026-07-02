@@ -157,6 +157,17 @@ della sua camera (`rpicam-jpeg`).
 Con `/foto@nome_bot` ne scatti una sola. Se la camera sta registrando, il bot
 risponde che non può scattare (la camera è esclusiva).
 
+**Comando `/video`** — clip breve dal vivo, per verificare esposizione/fuoco/panning:
+
+- `/video` → registra ~40s a **1080p 50fps** (~40 MB) e la invia
+- `/video 20` → clip di 20s (durata regolabile, **max 45s** per restare sotto il
+  limite di 50 MB che Telegram impone ai bot)
+
+> Telegram non permette ai bot di inviare file oltre i 50 MB, quindi `/video`
+> serve a controllare il feed, non a scaricare le partite: il footage completo
+> resta su Firebase Storage. La clip usa la camera in modo esclusivo, quindi non
+> è disponibile durante una registrazione in corso.
+
 > Se `/foto` non riceve risposta: 1) il daemon è attivo e aggiornato sul Pi?
 > (`git pull` + `sudo python3 update.py`); 2) la Group Privacy è **off** e i bot
 > sono stati **riaggiunti** al gruppo dopo averla disattivata?
