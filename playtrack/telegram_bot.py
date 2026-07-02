@@ -139,7 +139,7 @@ def _handle_update(session, token, allowed_chat, capture_fn, clip_fn, label, upd
             session, token, chat_id,
             f"PlayTrack — {label}\n\nComandi:\n"
             f"/foto — scatta e invia l'inquadratura attuale\n"
-            f"/video [sec] — invia una clip 1080p50 (default 40s, max 45s)"
+            f"/video [sec] — invia una clip 1080p30 (default 40s, max 45s)"
         )
 
 

@@ -194,8 +194,10 @@ camera_lock = threading.Lock()
 
 SNAPSHOT_PATH = RECORDINGS_DIR / f".snapshot_{CAMERA_ID}.jpg"
 
-# Clip breve per /video: 1080p50 nativo, dimensionata per stare sotto i 50 MB
-# che Telegram consente ai bot. A 8 Mbps: ~1 MB/s -> 40s ≈ 40 MB.
+# Clip breve per /video: 1080p30, dimensionata per stare sotto i 50 MB che
+# Telegram consente ai bot. A 8 Mbps: ~1 MB/s -> 40s ≈ 40 MB.
+# NB: 30fps e non 50 perché l'encoder H.264 hardware del Pi 4 (bcm2835-codec)
+# non riesce ad avviare lo stream a 1080p50 (VIDIOC_STREAMON failed).
 CLIP_PATH        = RECORDINGS_DIR / f".clip_{CAMERA_ID}.mp4"
 CLIP_DEFAULT_SEC = 40
 CLIP_MAX_SEC     = 45          # ~45 MB, margine sotto il limite Telegram
@@ -281,7 +283,7 @@ def capture_clip(duration_sec=None):
             "-t", str(duration * 1000),
             "--width", "1920",
             "--height", "1080",
-            "--framerate", "50",
+            "--framerate", "30",
             "--codec", "libav",
             "--libav-format", "mp4",
             "--bitrate", str(CLIP_BITRATE),

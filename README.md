@@ -160,7 +160,7 @@ risponde che non può scattare (la camera è esclusiva).
 
 **Comando `/video`** — clip breve dal vivo, per verificare esposizione/fuoco/panning:
 
-- `/video` → registra ~40s a **1080p 50fps** (~40 MB) e la invia
+- `/video` → registra ~40s a **1080p 30fps** (~40 MB) e la invia
 - `/video 20` → clip di 20s (durata regolabile, **max 45s** per restare sotto il
   limite di 50 MB che Telegram impone ai bot)
 
