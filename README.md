@@ -37,12 +37,13 @@ sudo chmod 600 /opt/playtrack/firebase-service-account.json
 ## Aggiornare il codice su un RPi già configurato
 
 ```bash
-git pull
+cd ~/playtrack-daemon
 sudo python3 update.py
 ```
 
-`update.py` copia i sorgenti Python, verifica se `requirements.txt` è cambiato
-(e installa le nuove dipendenze solo se necessario), poi riavvia il servizio.
+`update.py` fa tutto da solo: **git pull**, copia i sorgenti Python, verifica se
+`requirements.txt` è cambiato (e installa le nuove dipendenze solo se necessario),
+poi riavvia il servizio.
 
 ## Variabili d'ambiente (.env)
 

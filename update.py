@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-PlayTrack — Aggiornamento rapido codice dopo git pull
+PlayTrack — Aggiornamento rapido del codice
 Uso: sudo python3 update.py
+
+Fa da solo il git pull, copia i sorgenti in /opt/playtrack, aggiorna le
+dipendenze (se cambiate) e riavvia il servizio. Un comando solo.
 """
 
 import os
@@ -87,8 +90,40 @@ def check_install_dir():
             f"  Esegui prima il setup: sudo python3 setup.py")
 
 
+def git_pull():
+    print(f"\n{BOLD}[1/4] Aggiornamento codice da GitHub (git pull)...{RESET}")
+
+    if not (SCRIPT_DIR / ".git").exists():
+        warn(f"{SCRIPT_DIR} non è un repository git, salto il pull")
+        warn("Continuo con i file già presenti nella cartella.")
+        return
+
+    # Il repo è di proprietà dell'utente (non root): esegui il pull come lui,
+    # così git non blocca per "dubious ownership" e usa le sue credenziali.
+    try:
+        owner = SCRIPT_DIR.owner()
+    except Exception:
+        owner = None
+
+    cmd = ["git", "-C", str(SCRIPT_DIR), "pull", "--ff-only"]
+    if owner and owner != "root":
+        cmd = ["sudo", "-u", owner, "-H"] + cmd
+
+    result = run(cmd, desc="git pull --ff-only", check=False, capture=True)
+    if result.returncode != 0:
+        warn("git pull fallito:")
+        if result.stderr:
+            print(f"  {RED}{result.stderr.strip()}{RESET}")
+        warn("Continuo con i file già presenti nella cartella.")
+        return
+
+    if result.stdout:
+        print(f"  {result.stdout.strip()}")
+    ok("Codice aggiornato da GitHub")
+
+
 def copy_source_files():
-    print(f"\n{BOLD}[1/3] Copia file sorgente Python...{RESET}")
+    print(f"\n{BOLD}[2/4] Copia file sorgente Python...{RESET}")
     for src in SOURCE_FILES:
         if not src.exists():
             err(f"File sorgente non trovato: {src}\n"
@@ -101,7 +136,7 @@ def copy_source_files():
 
 
 def update_requirements():
-    print(f"\n{BOLD}[2/3] Verifica requirements.txt...{RESET}")
+    print(f"\n{BOLD}[3/4] Verifica requirements.txt...{RESET}")
 
     if not REQUIREMENTS_SRC.exists():
         warn(f"requirements.txt non trovato in {REQUIREMENTS_SRC}, skip")
@@ -131,7 +166,7 @@ def update_requirements():
 
 
 def restart_service():
-    print(f"\n{BOLD}[3/3] Riavvio servizio systemd...{RESET}")
+    print(f"\n{BOLD}[4/4] Riavvio servizio systemd...{RESET}")
 
     # Controlla che il servizio esista
     result = run(
@@ -173,6 +208,7 @@ if __name__ == "__main__":
     check_install_dir()
 
     try:
+        git_pull()
         copy_source_files()
         update_requirements()
         restart_service()
